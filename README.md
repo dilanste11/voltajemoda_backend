@@ -1,6 +1,6 @@
 # Voltaje Moda
 
-Ecommerce de ropa construido en **Blazor Web App** (.NET 10), full-stack en C#: un mismo proyecto sirve tanto la lógica de servidor como la interfaz. No hay una separación de repos/deploys entre "frontend" y "backend" — es un solo codebase, y se espera que **todo el equipo trabaje en ambas partes** según lo que necesite la funcionalidad que esté construyendo.
+Ecommerce de ropa construido en **Blazor Web App** (.NET 10), full-stack en C#: un mismo proyecto donde sirve la lógica de servidor . Separación de repos/deploys entre "frontend" y "backend", y se espera que **todo el equipo trabaje en ambas partes** según lo que necesite la funcionalidad que esté construyendo.
 
 ## Alcance actual del proyecto
 
