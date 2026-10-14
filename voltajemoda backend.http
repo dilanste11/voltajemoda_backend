@@ -1,0 +1,6 @@
+@voltajemoda_backend_HostAddress = http://localhost:5181
+
+GET {{voltajemoda_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
