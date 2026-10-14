@@ -1,117 +1,66 @@
-# Voltaje Moda
+# Voltaje Moda - Backend API
 
-Ecommerce de ropa construido en **Blazor Web App** (.NET 10), full-stack en C#: un mismo proyecto donde sirve la lógica de servidor . Separación de repos/deploys entre "frontend" y "backend", y se espera que **todo el equipo trabaje en ambas partes** según lo que necesite la funcionalidad que esté construyendo.
+API REST transaccional desarrollada en **ASP.NET Core (.NET 10)** con C#. Este proyecto funciona exclusivamente como el **Backend** del e-commerce Voltaje Moda, proporcionando todos los endpoints y la lógica de negocio para la gestión de productos, carritos, pagos, cupones y administración logística (OMS).
 
-## Alcance actual del proyecto
+## Alcance del Proyecto
 
-Funcionalidades ya implementadas y operativas de punta a punta:
+La API cubre los siguientes dominios de negocio:
 
-- **Catálogo**: productos con variantes (talla/color) y stock por variante, categorías, filtro por categoría, productos en oferta (precio original + precio de oferta).
-- **Cuentas**: registro/login (ASP.NET Core Identity), roles `Cliente` y `Administrador`, perfil editable, gestión de direcciones de envío. Registro con nombre, teléfono, correo, contraseña y dirección de envío en un solo paso, más aceptación de términos y condiciones. Login también disponible con **Google** (vincula automáticamente si ya existe una cuenta local con el mismo correo). Interfaz de login/registro con diseño propio (`auth-page`/`auth-card` en `wwwroot/app.css`).
-- **Gestión Transaccional (API)**: Carrito de compras persistente con validación de inventario en tiempo real. Checkout protegido por transacciones SQL que descuenta stock, aplica matemática de cupones y registra historial de Kardex automáticamente.
-- **Motor de Marketing**: CRUD administrativo para creación de cupones promocionales con fechas de caducidad y endpoint de validación en tiempo real para el cliente.
-- **Panel de administración** (`/admin`, solo rol `Administrador`): shell propio con sidebar oscura y diseño independiente del sitio público. Incluye dashboard con KPIs y gráficos (ventas, top productos), gestión del banner/carrusel del inicio (`/admin/banner`, imagen por URL o subida desde el equipo, con enlace opcional al hacer click). CRUD de productos (incluyendo variantes, imagen y marca de "destacado") y categorías, control de inventario con historial de movimientos de stock (`/admin/inventario`). Gestión avanzada de pedidos (OMS) con filtros de búsqueda y máquina de estados logísticos con reversión automática de inventario ante cancelaciones. Gestión de estadísticas con rango de fechas configurable (`/admin/estadisticas`) y gestión de usuarios/roles (`/admin/usuarios`). Con protecciones para no borrar en cascada datos con historial real.
-- **Inicio (`/`)**: carrusel configurable desde el admin (con fallback a una imagen genérica si no hay slides activos) y sección "Ofertas destacadas" con los productos que el admin marcó como destacados (no es automático por precio/oferta).
-- **Diseño base**: navbar superior, footer con contacto/redes, paleta blanco/negro aplicada globalmente en el sitio público; el panel admin tiene su propia paleta (sidebar oscura + acento coral), ver `wwwroot/admin.css`.
+- **Catálogo e Inventario:** Endpoints para consultar productos, variantes (tallas/colores) y disponibilidad de stock en tiempo real.
+- **Gestión Transaccional (Carrito y Checkout):** Persistencia de carrito de compras, validación de inventario en el milisegundo de compra y ejecución de transacciones SQL (Rollback en caso de fallo). Generación de pedidos inmutables.
+- **Motor de Marketing:** CRUD para la creación de cupones promocionales con validación de fechas, cálculo de porcentajes y aplicación de descuentos directos en el checkout.
+- **Gestión de Pedidos Logística (OMS):** Bandeja protegida para administradores y empleados que permite filtrar órdenes por estado, fechas y montos. Incluye máquina de estados para el seguimiento del pedido.
+- **Auditoría y Kardex:** Reversión automática de inventario (las prendas canceladas vuelven al stock) y registro histórico (Kardex) de quién y por qué se alteró el inventario.
 
-### Backlog / próximos pasos (no implementado todavía)
+## Stack Tecnológico
 
-- Pasarela de pago real (hoy el checkout es simulado).
-- Búsqueda de productos.
-- Reemplazar los placeholders del footer (redes sociales, teléfono) por los datos reales.
-- Rehacer el diseño visual del sitio público (el panel de administración ya tiene diseño propio, ver arriba).
-- Pruebas automatizadas (unitarias/integración).
+- **Framework:** ASP.NET Core 10 (Web API)
+- **ORM:** Entity Framework Core 10
+- **Base de Datos:** SQL Server 
+- **Autenticación:** JSON Web Tokens (JWT) con políticas basadas en roles (`Cliente`, `Empleado`, `Administrador`).
 
-## Stack
+## Estructura del Proyecto
 
-- **.NET 10** (Blazor Web App, interactividad Server)
-- **Entity Framework Core 10** + **SQL Server Express** en desarrollo / **Azure SQL Database** en producción
-- **ASP.NET Core Identity** (registro/login, roles `Cliente` / `Administrador`), con login externo por **Google OAuth**
-- **Azure Communication Services** para el envío real de emails (confirmación de cuenta, reseteo de contraseña) en producción
-- **Bootstrap** (incluido por la plantilla, vendored en `wwwroot/lib/bootstrap`)
-- **Chart.js**, cargado por CDN desde `Components/App.razor`. **Bootstrap Icons**, cargado por CDN solo en el panel de administración (`Components/Layout/AdminLayout.razor`). No hay pipeline de npm/build de JS en el proyecto, por eso se usan así en vez de instalarlos como paquete.
+El código está organizado siguiendo un patrón enfocado en APIs y controladores ligeros:
 
-## Requisitos previos
+- **`Controllers/`**: Controladores que exponen los endpoints REST (ej. `PedidosController`, `CuponesController`, `AdminPedidosController`).
+- **`DTOs/`**: Objetos de Transferencia de Datos divididos por dominio (Marketing, Transaccional) para evitar exponer los modelos directamente a las peticiones HTTP.
+- **`Middlewares/`**: Interceptores de la tubería HTTP para el manejo de lógica transversal, seguridad o manejo de errores.
+- **`Models/`**: Entidades de base de datos (`Pedido`, `Producto`, `Cupones`, etc.) y el contexto principal de configuración de Entity Framework (`VoltajeDbContext.cs`).
+- **`Services/`**: Clases de servicios para encapsular lógica de negocio compleja o integraciones.
 
-- [.NET SDK 10] — mismo instalador en Windows, Linux y macOS.
-- **Base de datos** (SQL Server): la forma de tenerla corriendo localmente cambia según tu sistema operativo — ver Base de datos según tu sistema operativo más abajo.
-- **Editor + extensiones**:
-  - **VS Code** (Windows, Linux, macOS):
-    - [C# Dev Kit] (`ms-dotnettools.csdevkit`) — soporte de C#/Razor/Blazor y depurador.
-    - [SQL Server (mssql)] (`ms-mssql.mssql`) — opcional, para conectarte y explorar la base de datos desde el propio editor.
-  - **Visual Studio 2022** (Windows; también hay una vista previa para Mac, pero el equipo usa mayormente VS Code + Visual Studio en Windows): versión **17.12 o superior** (la que soporta .NET 10), con el workload **"Desarrollo web y de ASP.NET"** marcado en el instalador. El workload **"Almacenamiento y procesamiento de datos"** (SQL Server Data Tools) es opcional.
-  - **Docker Desktop** (Linux: Docker Engine) — necesario únicamente si vas a correr SQL Server en contenedor (Linux y macOS, ver abajo).
+## Requisitos Previos
 
-### Base de datos según tu sistema operativo
+- [.NET SDK 10]
+- **Base de Datos:** SQL Server (Express, Developer o en contenedor Docker).
+- **Herramientas de desarrollo:** Visual Studio 2022 (v17.12+) o VS Code con la extensión C# Dev Kit.
 
-- **Windows**: SQL Server Express local (instalación "Basic"), con la instancia por defecto `SQLEXPRESS`. Si tu instancia se llama distinto, ajusta la cadena de conexión en `appsettings.json`. Es la opción que usa hoy el resto del equipo.
-- **Linux**: no existe SQL Server Express nativo fuera de contenedor — corré la imagen oficial de Microsoft con Docker.
-- **macOS**:
-  - **Intel**: la misma imagen y comando que en Linux funciona sin cambios.
-  - **Apple Silicon (M1/M2/M3)**: la imagen estándar de SQL Server no tiene build ARM64 nativo. Usá **Azure SQL Edge** en su lugar (sí soporta ARM64).
-- **Nota común para Linux/macOS**: quien use Docker debe ajustar la cadena de conexión en `appsettings.Development.json` (o vía `dotnet user-secrets`) para usar autenticación SQL en vez de la integrada de Windows.
+## Cómo levantar el proyecto localmente
 
-## Cómo levantar el proyecto
+1. **Clonar el repositorio:**
+   ```bash
+   git clone https://github.com/dilanste11/voltajemoda_backend.git
+   cd voltajemoda_backend
+   ```
 
-- Trabaja siempre a partir de la rama `desarrollo`.
-- `dotnet ef database update` crea la base de datos `VoltajeModaDb` y aplica todas las migraciones existentes.
-- Al arrancar **en desarrollo local únicamente**, la app siembra automáticamente datos de prueba (categorías, productos con variantes, una oferta) y roles (`Cliente`, `Administrador`), incluyendo un usuario administrador de prueba:
-  - **Email:** `admin@voltajemoda.com`
-  - **Contraseña:** `Admin1234!`
-  
-  Este usuario **no existe en producción** (el seeding de datos demo y del admin de prueba está condicionado a `IsDevelopment()` en `Program.cs`). En producción, el primer administrador se asigna manualmente en la base de datos — ver la sección "Permisos" más abajo.
+2. **Configurar la base de datos:**
+   - Asegúrate de tener SQL Server ejecutándose localmente.
+   - Ajusta la cadena de conexión (`ConnectionStrings:DefaultConnection`) dentro del archivo `appsettings.Development.json` o `appsettings.json` según tu instancia de SQL Server.
 
-Si no tienes la herramienta `dotnet-ef` instalada:
+3. **Restaurar y compilar:**
+   ```bash
+   dotnet restore
+   dotnet build
+   ```
 
-```powershell
-dotnet tool install --global dotnet-ef
-```
+4. **Ejecutar la API:**
+   ```bash
+   dotnet run
+   ```
+   *La API se levantará y podrás explorar todos los endpoints a través de la interfaz de Swagger visitando la URL local que genere la terminal.*
 
-## Estructura del proyecto
+## Convenciones y Reglas de Negocio
 
-```
-Models/           Entidades de dominio (Producto, Categoria, Carrito, Pedido, MovimientoStock, etc.) — el "backend" de datos
-Data/             ApplicationDbContext, ApplicationUser, sembradores de datos
-Migrations/       Migraciones de EF Core
-DTOs/             Objetos de Transferencia de Datos estructurados por dominios (Consumidor, Marketing, Transaccional)
-Controllers/      Endpoints de la API REST para la gestión de direcciones, carritos, pedidos y cupones.
-Components/
-  Pages/          Páginas públicas (Home, Productos, Carrito, Checkout, MisPedidos...)
-  Pages/Admin/    Panel de administración (protegido por rol "Administrador"): dashboard, productos, categorías, inventario, pedidos, estadísticas, usuarios
-  Account/        Login/Registro/gestión de cuenta (scaffolding de Identity)
-  Layout/         MainLayout, NavMenu, Footer, AdminLayout
-  Shared/         Componentes reutilizables sin ruta propia (ej. ProductoCard)
-```
-
-Además del sitio Blazor, el proyecto expone una **API REST** bajo `/api/...` pensada para consumidores y transacciones directas, integrando validación mediante JWT y políticas de autorización por roles.
-
-## Convenciones a tener en cuenta
-
-- **Soft Delete (Borrado Lógico):** Las direcciones de envío y los cupones promocionales no se eliminan físicamente de la base de datos para no romper la integridad histórica. Se utiliza una bandera booleana `Activo = false`.
-- **Inmutabilidad Transaccional:** Al realizar un pedido, los datos críticos como la dirección de envío, ciudad y precio unitario se congelan como texto plano en las tablas transaccionales, evitando que futuras ediciones en el catálogo o en la libreta del cliente alteren la factura.
-- **Manejo de Transacciones SQL:** Todo el proceso de generación de pedidos (creación de orden, detalles, descuento de stock y registro en Kardex) se ejecuta bajo un `BeginTransactionAsync`. Si el stock se agota a mitad de la compra, toda la operación hace rollback.
-- **Todo el texto visible al usuario debe estar en español** — títulos de página, botones, labels, placeholders, mensajes de error/éxito, todo.
-- **Cuidado con `ON DELETE CASCADE`:** borrar una `Categoria` con productos, o un `Producto`/`ProductoVariante` con pedidos asociados, borraría en cascada historial real. 
-- **Precio de un producto:** usa siempre `producto.PrecioEfectivo` (no `producto.Precio` directamente) para cualquier cálculo de dinero real (carrito, checkout, totales) — respeta automáticamente si el producto está en oferta.
-- **Colores:** paleta blanco/negro aplicada globalmente en `wwwroot/app.css` (sobreescribe `.btn-primary`, `.text-primary`, `.bg-primary` de Bootstrap). Usa clases `btn-dark` / `btn-outline-dark` en vistas nuevas en vez de `btn-primary`, para consistencia visual.
-
-## Autenticación
-
-- **Registro por correo**: pide nombre completo, correo, teléfono, contraseña y una dirección de envío en el mismo formulario, además de aceptar los Términos y Condiciones. Requiere confirmar el correo antes de poder iniciar sesión (`RequireConfirmedAccount = true`).
-- **Login con Google**: opcional — solo aparece si están configuradas las credenciales. Si el correo de la cuenta de Google ya tiene una cuenta local registrada por contraseña, se **vincula automáticamente** a esa cuenta en vez de fallar por correo duplicado (`Components/Account/Pages/ExternalLogin.razor`). 
-- **Política de contraseña**: mínimo 8 caracteres, con mayúscula, minúscula, número y símbolo. Bloqueo de cuenta tras 5 intentos fallidos por 10 minutos.
-- **Rate limiting**: máximo 10 solicitudes por minuto por IP en cualquier ruta `/Account/*`, para mitigar fuerza bruta/credential stuffing.
-
-## Despliegue
-
-La app corre en producción sobre **Azure App Service** (Linux, .NET 10) + **Azure SQL Database**, con **Azure Communication Services** para el envío real de emails.
-
-- El despliegue es **automático**: cada push a `main` dispara un workflow de GitHub Actions (`.github/workflows/main_voltajemoda.yml`) que compila y publica la app al App Service llamado `voltajemoda`.
-- **Migraciones en producción**: el workflow de GitHub Actions hoy solo compila y publica — no corre `dotnet ef database update` contra la base de producción. 
-- Las credenciales (connection string de SQL, connection string de Azure Communication Services) se configuran como variables de entorno/cadenas de conexión directamente en el App Service — **nunca** en `appsettings.json` ni en el repo.
-
-## Permisos
-
-- La app tiene dos roles de Identity: `Cliente` y `Administrador` (sembrados en `Data/IdentitySeeder.cs`). El panel `/admin` completo exige `Administrador`.
-- **Primer administrador en producción**: siempre requiere un paso manual — registrate normalmente en el sitio y asignate el rol `Administrador` por SQL directo contra la base de producción. 
-- **A partir de ahí**, otorgar o quitar el rol `Administrador` a otras cuentas se hace desde el propio panel, en **`/admin/usuarios`**.
+- **Inmutabilidad de Pedidos:** Una vez que se ejecuta el checkout, la dirección y ciudad del cliente se guardan como texto fijo en la tabla `Pedidos`. Esto evita que ediciones futuras en la libreta de direcciones del usuario alteren una factura ya emitida.
+- **Borrado Lógico (Soft Delete):** Elementos clave como las direcciones de envío o los cupones promocionales utilizan una bandera booleana (`Activo = false`) y no se eliminan de la base de datos para preservar la integridad transaccional e histórica.
+- **Transacciones Seguras:** El flujo de checkout utiliza `BeginTransactionAsync()`. Si ocurre algún fallo (ej. otro cliente compró la última unidad un segundo antes), la transacción hace rollback automático sin generar datos huérfanos.
