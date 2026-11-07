@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -72,7 +72,52 @@ public class VariantesController : ControllerBase
         _context.Variantes.Add(nuevaVariante);
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensaje = "Variante creada exitosamente. Recuerda realizar un ajuste de inventario para sumarle stock." });
+        return Ok(new { mensaje = "Variante creada exitosamente. Recuerda realizar un ajuste de inventario para sumarle stock.", varianteId = nuevaVariante.VarianteId });
+    }
+
+    [Authorize(Roles = "Administrador, Empleado")]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> ActualizarVariante(int id, [FromBody] CrearVarianteDto dto)
+    {
+        var variante = await _context.Variantes.FindAsync(id);
+        if (variante == null) return NotFound("Variante no encontrada.");
+
+        if (await _context.Variantes.AnyAsync(v => v.VarianteId != id &&
+            v.SkuVariante.ToLower() == dto.SKU_Variante.ToLower()))
+        {
+            return BadRequest("Ya existe una variante con este SKU.");
+        }
+
+        variante.SkuVariante = dto.SKU_Variante;
+        variante.Talla = dto.Talla;
+        variante.Color = dto.Color;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { mensaje = "Variante actualizada correctamente." });
+    }
+
+    [Authorize(Roles = "Administrador, Empleado")]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> EliminarVariante(int id)
+    {
+        var variante = await _context.Variantes.FindAsync(id);
+        if (variante == null) return NotFound("Variante no encontrada.");
+
+        variante.Activo = false;
+        await _context.SaveChangesAsync();
+        return Ok(new { mensaje = "Variante desactivada correctamente." });
+    }
+
+    [Authorize(Roles = "Administrador, Empleado")]
+    [HttpPut("{id}/estado")]
+    public async Task<IActionResult> CambiarEstadoVariante(int id)
+    {
+        var variante = await _context.Variantes.FindAsync(id);
+        if (variante == null) return NotFound("Variante no encontrada.");
+
+        variante.Activo = !variante.Activo;
+        await _context.SaveChangesAsync();
+        return Ok(new { mensaje = "Estado de variante actualizado correctamente.", variante.Activo });
     }
 
     // 3. AJUSTAR INVENTARIO (Protegido - El corazón del Kardex)
@@ -92,9 +137,6 @@ public class VariantesController : ControllerBase
         int usuarioId = ObtenerUsuarioIdDelToken();
         var empleado = await _context.Empleados.FirstOrDefaultAsync(e => e.UsuarioId == usuarioId);
 
-        if (empleado == null)
-            return BadRequest("Tu cuenta no está vinculada a un perfil de empleado operativo válido para mover mercancía.");
-
         // 4. Modificar el stock
         variante.Stock += dto.CantidadAjuste;
 
@@ -102,7 +144,7 @@ public class VariantesController : ControllerBase
         var historial = new HistorialInventario
         {
             VarianteId = id,
-            EmpleadoId = empleado.EmpleadoId,
+            EmpleadoId = empleado?.EmpleadoId,
             CantidadAjuste = dto.CantidadAjuste,
             Motivo = dto.Motivo,
             FechaAjuste = DateTime.Now

@@ -31,7 +31,7 @@ public class AuditoriaInventarioController : ControllerBase
                 HistorialId = h.HistorialId, // Ajusta a Id si tu modelo difiere
                 NombreProducto = h.Variante.Producto.Nombre,
                 SKU_Variante = h.Variante.SkuVariante,
-                NombreEmpleado = h.Empleado.Nombre + " " + h.Empleado.Apellido,
+                NombreEmpleado = h.Empleado == null ? "Administrador" : h.Empleado.Nombre + " " + h.Empleado.Apellido,
                 CantidadAjuste = h.CantidadAjuste,
                 Motivo = h.Motivo,
                 FechaAjuste = h.FechaAjuste.GetValueOrDefault()

@@ -71,6 +71,7 @@ public class UsuariosController : ControllerBase
             .Select(c => new ClienteResponseDto
             {
                 UsuarioId = c.UsuarioId,
+                RolId = c.Usuario.RolId,
                 Nombre = c.Nombre,
                 Apellido = c.Apellido,
                 CorreoElectronico = c.Usuario.CorreoElectronico,
@@ -116,6 +117,7 @@ public class UsuariosController : ControllerBase
             .Select(e => new EmpleadoResponseDto
             {
                 UsuarioId = e.UsuarioId,
+                RolId = e.Usuario.RolId,
                 Nombre = e.Nombre,
                 Apellido = e.Apellido,
                 CorreoElectronico = e.Usuario.CorreoElectronico,
@@ -160,73 +162,23 @@ public class UsuariosController : ControllerBase
     }
 
     [HttpPut("{id}/rol")]
-    public async Task<IActionResult> CambiarRolUsuario(int id, [FromBody] CambiarRolDto dto)
+    public async Task<IActionResult> CambiarRol(int id, [FromBody] CambiarRolDto dto)
     {
-        // 1. Buscar el usuario y su rol actual
-        var usuario = await _context.Usuarios
-            .Include(u => u.Rol)
-            .FirstOrDefaultAsync(u => u.UsuarioId == id);
-
+        var usuario = await _context.Usuarios.FindAsync(id);
         if (usuario == null) return NotFound("Usuario no encontrado.");
 
-        // 2. Buscar el nuevo rol solicitado
-        var nuevoRol = await _context.Roles.FirstOrDefaultAsync(r => r.NombreRol == dto.NuevoRol);
+        var nuevoRol = await _context.Roles.FirstOrDefaultAsync(r => r.RolId == dto.NuevoRolId);
         if (nuevoRol == null) return BadRequest("El rol especificado no existe en el sistema.");
 
-        if (usuario.RolId == nuevoRol.RolId)
-            return BadRequest("El usuario ya tiene asignado este rol.");
-
-        // 3. PROTECCIÓN CRÍTICA: Evitar quitarse permisos a sí mismo
         var currentUserIdClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
         if (currentUserIdClaim != null && currentUserIdClaim.Value == id.ToString())
         {
             return BadRequest(new { error = true, mensaje = "Por seguridad, no puedes cambiar tu propio rol." });
         }
 
-        string rolActual = usuario.Rol.NombreRol;
-
-        // 4. Lógica de Migración: De Cliente a Empleado/Admin
-        if (rolActual == "Cliente" && (dto.NuevoRol == "Empleado" || dto.NuevoRol == "Administrador"))
-        {
-            if (string.IsNullOrWhiteSpace(dto.Cargo))
-                return BadRequest("Para promover a un cliente, debes enviar obligatoriamente el campo 'cargo'.");
-
-            var perfilCliente = await _context.Clientes.FirstOrDefaultAsync(c => c.UsuarioId == id);
-            if (perfilCliente != null)
-            {
-                var nuevoEmpleado = new Empleado
-                {
-                    UsuarioId = id,
-                    Nombre = perfilCliente.Nombre,
-                    Apellido = perfilCliente.Apellido,
-                    Cargo = dto.Cargo
-                };
-                _context.Empleados.Add(nuevoEmpleado);
-                _context.Clientes.Remove(perfilCliente);
-            }
-        }
-        // 5. Lógica de Migración: De Empleado/Admin a Cliente
-        else if ((rolActual == "Empleado" || rolActual == "Administrador") && dto.NuevoRol == "Cliente")
-        {
-            var perfilEmpleado = await _context.Empleados.FirstOrDefaultAsync(e => e.UsuarioId == id);
-            if (perfilEmpleado != null)
-            {
-                var nuevoCliente = new Cliente
-                {
-                    UsuarioId = id,
-                    Nombre = perfilEmpleado.Nombre,
-                    Apellido = perfilEmpleado.Apellido,
-                    Telefono = null // Queda nulo hasta que el cliente lo actualice en su perfil
-                };
-                _context.Clientes.Add(nuevoCliente);
-                _context.Empleados.Remove(perfilEmpleado);
-            }
-        }
-
-        // 6. Actualizar la tabla principal y guardar
-        usuario.RolId = nuevoRol.RolId;
+        usuario.RolId = dto.NuevoRolId;
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensaje = $"Operación exitosa. El usuario ahora tiene el rol de: {dto.NuevoRol}." });
+        return Ok(new { mensaje = "Rol actualizado correctamente" });
     }
 }

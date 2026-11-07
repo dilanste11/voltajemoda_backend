@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using voltajemoda_backend.DTOs.Catalogo;
@@ -28,18 +28,21 @@ public class ProductosController : ControllerBase
         [FromQuery] decimal? precioMin = null,
         [FromQuery] decimal? precioMax = null)
     {
-        // 1. Iniciamos la consulta base (solo productos activos para el público)
         var query = _context.Productos
-            .Include(p => p.Categoria)
-            .Where(p => p.Activo == true)
-            .AsQueryable();
+            .AsNoTracking()
+            .Where(p => p.Activo);
 
         // 2. Aplicamos los filtros condicionales si el usuario los envía
         if (categoriaId.HasValue)
             query = query.Where(p => p.CategoriaId == categoriaId.Value);
 
         if (!string.IsNullOrWhiteSpace(busqueda))
-            query = query.Where(p => p.Nombre.Contains(busqueda) || p.Descripcion.Contains(busqueda));
+        {
+            var texto = busqueda.ToLower();
+            query = query.Where(p =>
+                (!string.IsNullOrEmpty(p.Nombre) && p.Nombre.ToLower().Contains(texto))
+                || (!string.IsNullOrEmpty(p.Descripcion) && p.Descripcion.ToLower().Contains(texto)));
+        }
 
         if (precioMin.HasValue)
             query = query.Where(p => p.PrecioBase >= precioMin.Value);
@@ -59,7 +62,7 @@ public class ProductosController : ControllerBase
             {
                 ProductoId = p.ProductoId,
                 CategoriaId = p.CategoriaId,
-                NombreCategoria = p.Categoria.Nombre,
+                NombreCategoria = p.Categoria == null ? string.Empty : p.Categoria.Nombre,
                 SkuBase = p.SkuBase,
                 Nombre = p.Nombre,
                 Descripcion = p.Descripcion,
@@ -78,6 +81,48 @@ public class ProductosController : ControllerBase
         };
 
         return Ok(respuesta);
+    }
+
+    // 1.1 OBTENER PRODUCTO POR ID (Público - Detalle con imágenes y variantes)
+    [HttpGet("{id}")]
+    public async Task<IActionResult> ObtenerProductoPorId(int id)
+    {
+        var producto = await _context.Productos
+            .Include(p => p.Categoria)
+            .Include(p => p.ProductoImagenes)
+            .Include(p => p.Variantes)
+            .FirstOrDefaultAsync(p => p.ProductoId == id);
+
+        if (producto == null)
+            return NotFound(new { error = true, mensaje = "Producto no encontrado." });
+
+        var detalle = new
+        {
+            producto.ProductoId,
+            producto.CategoriaId,
+            NombreCategoria = producto.Categoria.Nombre,
+            producto.SkuBase,
+            producto.Nombre,
+            producto.Descripcion,
+            producto.PrecioBase,
+            producto.Activo,
+            Imagenes = producto.ProductoImagenes
+                .OrderBy(i => i.Orden)
+                .Select(i => new { i.ImagenId, i.UrlImagen, i.Orden }),
+            Variantes = producto.Variantes
+                .Where(v => v.Activo)
+                .Select(v => new
+                {
+                    v.VarianteId,
+                    v.SkuVariante,
+                    v.Talla,
+                    v.Color,
+                    v.Stock,
+                    v.Activo
+                })
+        };
+
+        return Ok(detalle);
     }
 
     // 2. CREAR PRODUCTO (Protegido)

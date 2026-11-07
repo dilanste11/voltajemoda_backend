@@ -13,6 +13,30 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Agregar soporte para Controladores
 builder.Services.AddControllers();
 
+// Configurar políticas de CORS para integración con Blazor
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("BlazorCorsPolicy", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:5000",
+                "https://localhost:7000",
+                "http://localhost:5200",
+                "https://localhost:7200"
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
+
+    options.AddPolicy("AllowAllDev", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 builder.Services.AddDbContext<VoltajeDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -72,12 +96,17 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     // Levanta la interfaz gráfica interactiva en la ruta /scalar
     app.MapScalarApiReference();
+    app.UseCors("AllowAllDev");
+}
+else
+{
+    app.UseHttpsRedirection();
+    app.UseCors("BlazorCorsPolicy");
 }
 
-app.UseHttpsRedirection();
 app.UseMiddleware<ExceptionMiddleware>();
 
-// El orden es obligatorio: el sistema debe saber QUIÉN eres antes de saber QUÉ puedes hacer
+// El orden es obligatorio: CORS -> Autenticación -> Autorización
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using voltajemoda_backend.DTOs.Catalogo;
@@ -50,7 +50,7 @@ public class CategoriasController : ControllerBase
         _context.Categorias.Add(nuevaCategoria);
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensaje = $"Categoría '{dto.Nombre}' creada exitosamente." });
+        return Ok(new { mensaje = $"Categoría '{dto.Nombre}' creada exitosamente.", categoriaId = nuevaCategoria.CategoriaId });
     }
 
     [Authorize(Roles = "Administrador, Empleado")]

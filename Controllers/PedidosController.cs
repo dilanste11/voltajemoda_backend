@@ -38,6 +38,7 @@ public class PedidosController : ControllerBase
         return Ok(metodos);
     }
 
+    [HttpPost]
     [HttpPost("checkout")]
     public async Task<IActionResult> ProcesarCheckout([FromBody] RealizarPedidoDto dto)
     {
