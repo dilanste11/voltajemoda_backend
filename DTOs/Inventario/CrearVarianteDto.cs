@@ -11,6 +11,9 @@ public class CrearVarianteDto
     [StringLength(50, ErrorMessage = "El SKU no puede exceder los 50 caracteres.")]
     public string SKU_Variante { get; set; } = null!;
 
+    [Range(0, int.MaxValue, ErrorMessage = "El stock inicial no puede ser negativo.")]
+    public int StockInicial { get; set; }
+
     [StringLength(20)]
     public string? Talla { get; set; }
 

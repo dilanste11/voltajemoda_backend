@@ -37,8 +37,14 @@ builder.Services.AddCors(options =>
     });
 });
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Falta configurar ConnectionStrings:DefaultConnection.");
 builder.Services.AddDbContext<VoltajeDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(connectionString, sqlOptions =>
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(5),
+            errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IPasswordHasherService, PasswordHasherService>();
 
@@ -49,7 +55,12 @@ builder.Services.AddOpenApi();
 
 // 3. Configurar Autenticación JWT leyendo los datos de secrets.json
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? builder.Configuration["JwtSettings:SecretKey"]
+    ?? throw new InvalidOperationException(
+        "Falta configurar la clave JWT. Defina Jwt:Key o JwtSettings:SecretKey.");
+builder.Configuration["Jwt:Key"] = jwtKey;
+var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

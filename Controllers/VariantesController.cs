@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using System.Security.Claims;
 using voltajemoda_backend.DTOs.Inventario;
 using voltajemoda_backend.Models;
@@ -53,26 +54,58 @@ public class VariantesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CrearVariante([FromBody] CrearVarianteDto dto)
     {
-        if (!await _context.Productos.AnyAsync(p => p.ProductoId == dto.ProductoId))
+        if (dto.ProductoId <= 0 ||
+            !await _context.Productos.AnyAsync(p => p.ProductoId == dto.ProductoId))
             return BadRequest("El producto especificado no existe.");
 
-        if (await _context.Variantes.AnyAsync(v => v.SkuVariante.ToLower() == dto.SKU_Variante.ToLower()))
+        var sku = dto.SKU_Variante?.Trim();
+        if (string.IsNullOrWhiteSpace(sku))
+            return BadRequest("El SKU de la variante es obligatorio.");
+
+        if (await _context.Variantes.AnyAsync(v => v.SkuVariante.ToLower() == sku.ToLower()))
             return BadRequest("Ya existe una variante con este SKU exacto.");
+
+        var usuarioClaim = User.Claims.FirstOrDefault(c =>
+            c.Type == "id" || c.Type == ClaimTypes.NameIdentifier);
+        var empleado = int.TryParse(usuarioClaim?.Value, out var usuarioId)
+            ? await _context.Empleados.FirstOrDefaultAsync(e => e.UsuarioId == usuarioId)
+            : null;
 
         var nuevaVariante = new Variante
         {
             ProductoId = dto.ProductoId,
-            SkuVariante = dto.SKU_Variante,
+            SkuVariante = sku,
             Talla = dto.Talla,
             Color = dto.Color,
-            Stock = 0, // Nace en cero como indica tu Base de Datos
+            Stock = dto.StockInicial,
             Activo = true
         };
 
         _context.Variantes.Add(nuevaVariante);
-        await _context.SaveChangesAsync();
+        if (dto.StockInicial > 0)
+        {
+            _context.HistorialInventarios.Add(new HistorialInventario
+            {
+                Variante = nuevaVariante,
+                EmpleadoId = empleado?.EmpleadoId,
+                CantidadAjuste = dto.StockInicial,
+                Motivo = "Stock inicial al crear variante",
+                FechaAjuste = DateTime.Now
+            });
+        }
 
-        return Ok(new { mensaje = "Variante creada exitosamente. Recuerda realizar un ajuste de inventario para sumarle stock.", varianteId = nuevaVariante.VarianteId });
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is SqlException sqlException &&
+            sqlException.Number is 2601 or 2627)
+        {
+            return Conflict("Ya existe una variante con este SKU exacto.");
+        }
+
+        return Ok(new { mensaje = "Variante creada exitosamente.", varianteId = nuevaVariante.VarianteId });
     }
 
     [Authorize(Roles = "Administrador, Empleado")]

@@ -121,7 +121,7 @@ public class UsuariosController : ControllerBase
                 Nombre = e.Nombre,
                 Apellido = e.Apellido,
                 CorreoElectronico = e.Usuario.CorreoElectronico,
-                Cargo = e.Cargo,
+                Cargo = e.Cargo ?? string.Empty,
                 Activo = e.Usuario.Activo,
                 // Usamos GetValueOrDefault() para evitar el error de nulos que tuvimos antes
                 FechaCreacion = e.Usuario.FechaCreacion.GetValueOrDefault()

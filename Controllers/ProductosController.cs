@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using voltajemoda_backend.DTOs.Catalogo;
 using voltajemoda_backend.Models;
 
@@ -11,10 +12,12 @@ namespace voltajemoda_backend.Controllers;
 public class ProductosController : ControllerBase
 {
     private readonly VoltajeDbContext _context;
+    private readonly ILogger<ProductosController> _logger;
 
-    public ProductosController(VoltajeDbContext context)
+    public ProductosController(VoltajeDbContext context, ILogger<ProductosController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     // 1. LISTAR PRODUCTOS (Público - Para la tienda y el backoffice)
@@ -28,59 +31,73 @@ public class ProductosController : ControllerBase
         [FromQuery] decimal? precioMin = null,
         [FromQuery] decimal? precioMax = null)
     {
-        var query = _context.Productos
-            .AsNoTracking()
-            .Where(p => p.Activo);
+        if (pagina < 1 || tamanoPagina < 1)
+            return BadRequest(new { mensaje = "La página y el tamaño deben ser mayores que cero." });
 
-        // 2. Aplicamos los filtros condicionales si el usuario los envía
-        if (categoriaId.HasValue)
-            query = query.Where(p => p.CategoriaId == categoriaId.Value);
-
-        if (!string.IsNullOrWhiteSpace(busqueda))
+        try
         {
-            var texto = busqueda.ToLower();
-            query = query.Where(p =>
-                (!string.IsNullOrEmpty(p.Nombre) && p.Nombre.ToLower().Contains(texto))
-                || (!string.IsNullOrEmpty(p.Descripcion) && p.Descripcion.ToLower().Contains(texto)));
-        }
+            var query = _context.Productos
+                .AsNoTracking()
+                .Where(p => p.Activo);
 
-        if (precioMin.HasValue)
-            query = query.Where(p => p.PrecioBase >= precioMin.Value);
+            if (categoriaId.HasValue)
+                query = query.Where(p => p.CategoriaId == categoriaId.Value);
 
-        if (precioMax.HasValue)
-            query = query.Where(p => p.PrecioBase <= precioMax.Value);
-
-        // 3. Calculamos la paginación
-        int totalRegistros = await query.CountAsync();
-        int totalPaginas = (int)Math.Ceiling(totalRegistros / (double)tamanoPagina);
-
-        // 4. Extraemos solo la página solicitada (Skip y Take)
-        var productos = await query
-            .Skip((pagina - 1) * tamanoPagina)
-            .Take(tamanoPagina)
-            .Select(p => new ProductoResponseDto
+            if (!string.IsNullOrWhiteSpace(busqueda))
             {
-                ProductoId = p.ProductoId,
-                CategoriaId = p.CategoriaId,
-                NombreCategoria = p.Categoria == null ? string.Empty : p.Categoria.Nombre,
-                SkuBase = p.SkuBase,
-                Nombre = p.Nombre,
-                Descripcion = p.Descripcion,
-                PrecioBase = p.PrecioBase,
-                Activo = p.Activo
-            })
-            .ToListAsync();
+                var texto = busqueda.ToLower();
+                query = query.Where(p =>
+                    (!string.IsNullOrEmpty(p.Nombre) && p.Nombre.ToLower().Contains(texto))
+                    || (!string.IsNullOrEmpty(p.Descripcion) && p.Descripcion.ToLower().Contains(texto)));
+            }
 
-        // 5. Armamos la respuesta final
-        var respuesta = new CatalogoPaginadoDto
+            if (precioMin.HasValue)
+                query = query.Where(p => p.PrecioBase >= precioMin.Value);
+
+            if (precioMax.HasValue)
+                query = query.Where(p => p.PrecioBase <= precioMax.Value);
+
+            int totalRegistros = await query.CountAsync();
+            int totalPaginas = (int)Math.Ceiling(totalRegistros / (double)tamanoPagina);
+
+            var productos = await query
+                .Skip((pagina - 1) * tamanoPagina)
+                .Take(tamanoPagina)
+                .Select(p => new ProductoResponseDto
+                {
+                    ProductoId = p.ProductoId,
+                    CategoriaId = p.CategoriaId,
+                    NombreCategoria = p.Categoria == null ? string.Empty : p.Categoria.Nombre,
+                    SkuBase = p.SkuBase,
+                    Nombre = p.Nombre,
+                    Descripcion = p.Descripcion,
+                    PrecioBase = p.PrecioBase,
+                    Activo = p.Activo
+                })
+                .ToListAsync();
+
+            var respuesta = new CatalogoPaginadoDto
+            {
+                Productos = productos,
+                PaginaActual = pagina,
+                TotalPaginas = totalPaginas,
+                TotalRegistros = totalRegistros
+            };
+
+            return Ok(respuesta);
+        }
+        catch (SqlException ex)
         {
-            Productos = productos,
-            PaginaActual = pagina,
-            TotalPaginas = totalPaginas,
-            TotalRegistros = totalRegistros
-        };
-
-        return Ok(respuesta);
+            _logger.LogError(ex, "SQL Server no está disponible al consultar el catálogo.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { mensaje = "Base de datos temporalmente no disponible" });
+        }
+        catch (TimeoutException ex)
+        {
+            _logger.LogError(ex, "Timeout al consultar el catálogo.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { mensaje = "Base de datos temporalmente no disponible" });
+        }
     }
 
     // 1.1 OBTENER PRODUCTO POR ID (Público - Detalle con imágenes y variantes)

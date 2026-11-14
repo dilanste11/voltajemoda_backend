@@ -25,10 +25,10 @@ public class PerfilController : ControllerBase
     // -----------------------------------------------------------
     // MÉTODO PRIVADO: Extrae el ID real y seguro desde el Token JWT
     // -----------------------------------------------------------
-    private int ObtenerUsuarioIdDelToken()
+    private bool TryObtenerUsuarioIdDelToken(out int usuarioId)
     {
         var claim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == ClaimTypes.NameIdentifier);
-        return int.Parse(claim!.Value);
+        return int.TryParse(claim?.Value, out usuarioId);
     }
 
     // -----------------------------------------------------------
@@ -37,24 +37,30 @@ public class PerfilController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> MiPerfil()
     {
-        int usuarioId = ObtenerUsuarioIdDelToken();
+        if (!TryObtenerUsuarioIdDelToken(out var usuarioId))
+            return Unauthorized();
 
         var usuario = await _context.Usuarios
             .Include(u => u.Rol)
             .FirstOrDefaultAsync(u => u.UsuarioId == usuarioId);
 
         if (usuario == null) return NotFound("Usuario no encontrado.");
+        var nombreRol = usuario.Rol?.NombreRol;
+        if (string.IsNullOrWhiteSpace(nombreRol))
+            return BadRequest("El usuario no tiene un rol válido.");
 
         // Dependiendo del rol, buscamos en la tabla correspondiente
-        if (usuario.Rol.NombreRol == "Cliente")
+        if (nombreRol == "Cliente")
         {
             var cliente = await _context.Clientes.FirstOrDefaultAsync(c => c.UsuarioId == usuarioId);
-            return Ok(new { usuario.CorreoElectronico, Rol = usuario.Rol.NombreRol, cliente?.Nombre, cliente?.Apellido, cliente?.Telefono });
+            if (cliente == null) return NotFound("Perfil de cliente no encontrado.");
+            return Ok(new { usuario.CorreoElectronico, Rol = nombreRol, cliente.Nombre, cliente.Apellido, cliente.Telefono });
         }
         else
         {
             var empleado = await _context.Empleados.FirstOrDefaultAsync(e => e.UsuarioId == usuarioId);
-            return Ok(new { usuario.CorreoElectronico, Rol = usuario.Rol.NombreRol, empleado?.Nombre, empleado?.Apellido, empleado?.Cargo });
+            if (empleado == null) return NotFound("Perfil de empleado no encontrado.");
+            return Ok(new { usuario.CorreoElectronico, Rol = nombreRol, empleado.Nombre, empleado.Apellido, empleado.Cargo });
         }
     }
 
@@ -64,12 +70,18 @@ public class PerfilController : ControllerBase
     [HttpPut]
     public async Task<IActionResult> ActualizarPerfil([FromBody] ActualizarPerfilDto dto)
     {
-        int usuarioId = ObtenerUsuarioIdDelToken();
+        if (!TryObtenerUsuarioIdDelToken(out var usuarioId))
+            return Unauthorized();
         var usuario = await _context.Usuarios.Include(u => u.Rol).FirstOrDefaultAsync(u => u.UsuarioId == usuarioId);
+        if (usuario == null) return NotFound("Usuario no encontrado.");
+        var nombreRol = usuario.Rol?.NombreRol;
+        if (string.IsNullOrWhiteSpace(nombreRol))
+            return BadRequest("El usuario no tiene un rol válido.");
 
-        if (usuario.Rol.NombreRol == "Cliente")
+        if (nombreRol == "Cliente")
         {
             var cliente = await _context.Clientes.FirstOrDefaultAsync(c => c.UsuarioId == usuarioId);
+            if (cliente == null) return NotFound("Perfil de cliente no encontrado.");
             cliente.Nombre = dto.Nombre;
             cliente.Apellido = dto.Apellido;
             cliente.Telefono = dto.Telefono;
@@ -77,6 +89,7 @@ public class PerfilController : ControllerBase
         else
         {
             var empleado = await _context.Empleados.FirstOrDefaultAsync(e => e.UsuarioId == usuarioId);
+            if (empleado == null) return NotFound("Perfil de empleado no encontrado.");
             empleado.Nombre = dto.Nombre;
             empleado.Apellido = dto.Apellido;
             // No permitimos que el empleado se cambie el Cargo a sí mismo
@@ -92,8 +105,10 @@ public class PerfilController : ControllerBase
     [HttpPut("password")]
     public async Task<IActionResult> CambiarPassword([FromBody] CambiarPasswordDto dto)
     {
-        int usuarioId = ObtenerUsuarioIdDelToken();
+        if (!TryObtenerUsuarioIdDelToken(out var usuarioId))
+            return Unauthorized();
         var usuario = await _context.Usuarios.FindAsync(usuarioId);
+        if (usuario == null) return NotFound("Usuario no encontrado.");
 
         // Validar que la contraseña actual sea correcta
         if (!_passwordHasher.VerifyPassword(dto.PasswordActual, usuario.PasswordHash))

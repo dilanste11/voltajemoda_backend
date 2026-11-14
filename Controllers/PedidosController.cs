@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using System.Security.Claims;
 using voltajemoda_backend.DTOs.Transaccional;
 using voltajemoda_backend.Models;
@@ -48,108 +49,113 @@ public class PedidosController : ControllerBase
         if (!await _context.MediosDePagos.AnyAsync(m => m.MetodoPagoId == dto.MetodoPagoId && m.Activo))
             return BadRequest("El método de pago seleccionado no es válido.");
 
-        var carrito = await _context.Carritos
-            .Include(c => c.CarritoItems)
-                .ThenInclude(ci => ci.Variante)
-                    .ThenInclude(v => v.Producto)
-            .FirstOrDefaultAsync(c => c.ClienteId == clienteId);
-
-        if (carrito == null || !carrito.CarritoItems.Any())
-            return BadRequest("Tu carrito de compras está vacío.");
-
-        using var transaction = await _context.Database.BeginTransactionAsync();
-        try
+        var estrategia = _context.Database.CreateExecutionStrategy();
+        return await estrategia.ExecuteAsync<IActionResult>(async () =>
         {
-            decimal subtotalPedido = 0;
+            _context.ChangeTracker.Clear();
+            var carritoIntento = await _context.Carritos
+                .Include(c => c.CarritoItems)
+                    .ThenInclude(ci => ci.Variante)
+                        .ThenInclude(v => v.Producto)
+                .FirstOrDefaultAsync(c => c.ClienteId == clienteId);
 
-            var nuevoPedido = new Pedido
+            if (carritoIntento == null || !carritoIntento.CarritoItems.Any())
+                return BadRequest("Tu carrito de compras está vacío.");
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                ClienteId = clienteId.Value,
-                DireccionEnvio = dto.DireccionEnvio, 
-                CiudadEnvio = dto.CiudadEnvio,       
-                MetodoPagoId = dto.MetodoPagoId,
-                CuponId = dto.CuponId,
-                Estado = "Pendiente",
-                FechaPedido = DateTime.Now,
-                Subtotal = 0,
-                Total = 0
-            };
+                decimal subtotalPedido = 0;
 
-            _context.Pedidos.Add(nuevoPedido);
-            await _context.SaveChangesAsync();
-
-            foreach (var item in carrito.CarritoItems)
-            {
-                var variante = item.Variante;
-
-                if (variante.Stock < item.Cantidad)
-                    throw new Exception($"El producto {variante.Producto.Nombre} (SKU: {variante.SkuVariante}) ya no tiene stock suficiente.");
-
-                decimal precioHistorico = variante.Producto.PrecioBase;
-                subtotalPedido += (precioHistorico * item.Cantidad);
-
-                var detalle = new DetallesPedido
+                var nuevoPedido = new Pedido
                 {
-                    PedidoId = nuevoPedido.PedidoId,
-                    VarianteId = item.VarianteId,
-                    Cantidad = item.Cantidad,
-                    PrecioUnitario = precioHistorico
+                    ClienteId = clienteId.Value,
+                    DireccionEnvio = dto.DireccionEnvio,
+                    CiudadEnvio = dto.CiudadEnvio,
+                    MetodoPagoId = dto.MetodoPagoId,
+                    CuponId = dto.CuponId,
+                    Estado = "Pendiente",
+                    FechaPedido = DateTime.Now,
+                    Subtotal = 0,
+                    Total = 0
                 };
-                _context.DetallesPedidos.Add(detalle);
 
-                variante.Stock -= item.Cantidad;
+                _context.Pedidos.Add(nuevoPedido);
+                await _context.SaveChangesAsync();
 
-                var historial = new HistorialInventario
+                foreach (var item in carritoIntento.CarritoItems)
                 {
-                    VarianteId = variante.VarianteId,
-                    EmpleadoId = null, 
-                    CantidadAjuste = -item.Cantidad,
-                    Motivo = $"Venta Web - Pedido #{nuevoPedido.PedidoId}",
-                    FechaAjuste = DateTime.Now
-                };
-                _context.HistorialInventarios.Add(historial);
-            }
+                    var variante = item.Variante;
 
-            // 4. Actualizar los totales del pedido y aplicar descuento
-            nuevoPedido.Subtotal = subtotalPedido;
-            decimal descuento = 0;
+                    if (variante.Stock < item.Cantidad)
+                        throw new Exception($"El producto {variante.Producto.Nombre} (SKU: {variante.SkuVariante}) ya no tiene stock suficiente.");
 
-            if (dto.CuponId.HasValue)
-            {
-                // Buscamos el cupón para validar que siga activo justo en el segundo de la compra
-                var cupon = await _context.Cupones.FindAsync(dto.CuponId.Value);
-                if (cupon != null && cupon.Activo && cupon.ValidoDesde <= DateTime.Now && cupon.ValidoHasta >= DateTime.Now)
-                {
-                    // Regla de tres simple: (Subtotal * Porcentaje) / 100
-                    descuento = subtotalPedido * (cupon.Descuento / 100m); // La 'm' es para forzar el tipo decimal
+                    decimal precioHistorico = variante.Producto.PrecioBase;
+                    subtotalPedido += (precioHistorico * item.Cantidad);
+
+                    var detalle = new DetallesPedido
+                    {
+                        PedidoId = nuevoPedido.PedidoId,
+                        VarianteId = item.VarianteId,
+                        Cantidad = item.Cantidad,
+                        PrecioUnitario = precioHistorico
+                    };
+                    _context.DetallesPedidos.Add(detalle);
+
+                    variante.Stock -= item.Cantidad;
+
+                    var historial = new HistorialInventario
+                    {
+                        VarianteId = variante.VarianteId,
+                        EmpleadoId = null,
+                        CantidadAjuste = -item.Cantidad,
+                        Motivo = $"Venta Web - Pedido #{nuevoPedido.PedidoId}",
+                        FechaAjuste = DateTime.Now
+                    };
+                    _context.HistorialInventarios.Add(historial);
                 }
-                else
+
+                // 4. Actualizar los totales del pedido y aplicar descuento
+                nuevoPedido.Subtotal = subtotalPedido;
+                decimal descuento = 0;
+
+                if (dto.CuponId.HasValue)
                 {
-                    // Si el cupón se venció mientras el usuario tenía el carrito abierto, abortamos la compra
-                    throw new Exception("El cupón aplicado ya no es válido o acaba de caducar.");
+                    var cupon = await _context.Cupones.FindAsync(dto.CuponId.Value);
+                    if (cupon != null && cupon.Activo && cupon.ValidoDesde <= DateTime.Now && cupon.ValidoHasta >= DateTime.Now)
+                    {
+                        descuento = subtotalPedido * (cupon.Descuento / 100m);
+                    }
+                    else
+                    {
+                        throw new Exception("El cupón aplicado ya no es válido o acaba de caducar.");
+                    }
                 }
+
+                nuevoPedido.Total = subtotalPedido - descuento;
+
+                _context.CarritoItems.RemoveRange(carritoIntento.CarritoItems);
+                carritoIntento.FechaActualizacion = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    mensaje = "¡Pedido realizado con éxito!",
+                    pedidoId = nuevoPedido.PedidoId,
+                    totalPagado = nuevoPedido.Total
+                });
             }
-
-            nuevoPedido.Total = subtotalPedido - descuento;
-
-            _context.CarritoItems.RemoveRange(carrito.CarritoItems);
-            carrito.FechaActualizacion = DateTime.Now;
-
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            return Ok(new
+            catch (Exception ex)
             {
-                mensaje = "¡Pedido realizado con éxito!",
-                pedidoId = nuevoPedido.PedidoId,
-                totalPagado = nuevoPedido.Total
-            });
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync();
-            return BadRequest(new { error = true, mensaje = ex.Message });
-        }
+                await transaction.RollbackAsync();
+                if (ex is DbUpdateException or SqlException)
+                    throw;
+
+                return BadRequest(new { error = true, mensaje = ex.Message });
+            }
+        });
     }
 
     [HttpGet("mis-pedidos")]

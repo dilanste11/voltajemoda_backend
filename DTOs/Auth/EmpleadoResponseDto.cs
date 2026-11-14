@@ -7,7 +7,7 @@ public class EmpleadoResponseDto
     public string Nombre { get; set; } = null!;
     public string Apellido { get; set; } = null!;
     public string CorreoElectronico { get; set; } = null!;
-    public string Cargo { get; set; } = null!;
+    public string Cargo { get; set; } = string.Empty;
     public bool Activo { get; set; }
     public DateTime FechaCreacion { get; set; }
 }

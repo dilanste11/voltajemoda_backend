@@ -20,16 +20,26 @@ public class CategoriasController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ObtenerCategorias()
     {
-        var categorias = await _context.Categorias
-            .Select(c => new CategoriaResponseDto
+        try
+        {
+            var categorias = await _context.Categorias
+                .AsNoTracking()
+                .ToListAsync();
+
+            var resultado = categorias.Select(c => new CategoriaResponseDto
             {
                 CategoriaId = c.CategoriaId,
-                Nombre = c.Nombre,
-                Activo = c.Activo // Ajustado según tu tabla
+                Nombre = c.Nombre ?? string.Empty,
+                Activo = c.Activo
             })
-            .ToListAsync();
+            .ToList();
 
-        return Ok(categorias);
+            return Ok(resultado);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { mensaje = "Error al obtener categorías", detalle = ex.Message });
+        }
     }
 
     [Authorize(Roles = "Administrador, Empleado")]
