@@ -2,7 +2,7 @@
 
 namespace voltajemoda_backend.DTOs.Inventario;
 
-public class AjustarInventarioDto
+public class AjustarInventarioDto : IValidatableObject
 {
     [Required(ErrorMessage = "Debes ingresar la cantidad (puede ser positiva para ingresos o negativa para salidas).")]
     public int CantidadAjuste { get; set; }
@@ -10,4 +10,14 @@ public class AjustarInventarioDto
     [Required(ErrorMessage = "El motivo del ajuste es obligatorio (Ej: Ingreso por compra, Producto dañado).")]
     [StringLength(255)]
     public string Motivo { get; set; } = null!;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (CantidadAjuste == 0)
+        {
+            yield return new ValidationResult(
+                "La cantidad del ajuste no puede ser cero.",
+                new[] { nameof(CantidadAjuste) });
+        }
+    }
 }

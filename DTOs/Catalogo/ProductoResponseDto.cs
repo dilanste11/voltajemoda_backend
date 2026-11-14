@@ -10,6 +10,8 @@ public class ProductoResponseDto
     public string? Descripcion { get; set; }
     public decimal PrecioBase { get; set; }
     public bool Activo { get; set; }
+    public int CantidadVariantes { get; set; }
+    public int Stock { get; set; }
 
     // Datos livianos para que las tarjetas del catálogo muestren imagen, tallas/colores y stock
     // sin tener que pedir el detalle de cada producto por separado.

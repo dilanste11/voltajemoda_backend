@@ -13,7 +13,9 @@ public class RealizarPedidoDto
     public string CiudadEnvio { get; set; } = null!;
 
     [Required(ErrorMessage = "Debes seleccionar un método de pago.")]
+    [Range(1, int.MaxValue, ErrorMessage = "El ID debe ser mayor a 0")]
     public int MetodoPagoId { get; set; }
 
+    [Range(1, int.MaxValue, ErrorMessage = "El ID debe ser mayor a 0")]
     public int? CuponId { get; set; }
 }

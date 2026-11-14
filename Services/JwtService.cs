@@ -23,8 +23,8 @@ public class JwtService : IJwtService
 
         var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, usuario.UsuarioId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, usuario.CorreoElectronico),
+            new Claim(ClaimTypes.NameIdentifier, usuario.UsuarioId.ToString()),
+            new Claim(ClaimTypes.Email, usuario.CorreoElectronico),
             new Claim(ClaimTypes.Role, nombreRol), // Esto es vital para el RBAC [Authorize(Roles = "Admin")]
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };

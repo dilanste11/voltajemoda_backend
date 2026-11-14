@@ -37,6 +37,8 @@ public class ProductosController : ControllerBase
         try
         {
             var query = _context.Productos
+                .Include(p => p.Variantes)
+                .Include(p => p.ProductoImagenes)
                 .AsNoTracking()
                 .Where(p => p.Activo);
 
@@ -72,7 +74,32 @@ public class ProductosController : ControllerBase
                     Nombre = p.Nombre,
                     Descripcion = p.Descripcion,
                     PrecioBase = p.PrecioBase,
-                    Activo = p.Activo
+                    Activo = p.Activo,
+                    CantidadVariantes = p.Variantes != null ? p.Variantes.Count(v => v.Activo) : 0,
+                    Stock = p.Variantes != null ? p.Variantes.Where(v => v.Activo).Sum(v => v.Stock) : 0,
+                    Variantes = p.Variantes != null
+                        ? p.Variantes
+                            .Where(v => v.Activo)
+                            .Select(v => new VarianteResumenDto
+                            {
+                                VarianteId = v.VarianteId,
+                                SkuVariante = v.SkuVariante,
+                                Talla = v.Talla,
+                                Color = v.Color,
+                                Stock = v.Stock,
+                                Activo = v.Activo
+                            })
+                            .ToList()
+                        : new List<VarianteResumenDto>(),
+                    Imagenes = p.ProductoImagenes
+                        .OrderBy(i => i.Orden)
+                        .Select(i => new ProductoImagenResumenDto
+                        {
+                            ImagenId = i.ImagenId,
+                            UrlImagen = i.UrlImagen,
+                            Orden = i.Orden
+                        })
+                        .ToList()
                 })
                 .ToListAsync();
 
@@ -169,6 +196,15 @@ public class ProductosController : ControllerBase
             Activo = true // Nace activo por defecto
         };
 
+        if (!string.IsNullOrWhiteSpace(dto.UrlImagen))
+        {
+            nuevoProducto.ProductoImagenes.Add(new ProductoImagene
+            {
+                UrlImagen = dto.UrlImagen.Trim(),
+                Orden = 1
+            });
+        }
+
         _context.Productos.Add(nuevoProducto);
         await _context.SaveChangesAsync();
 
@@ -180,7 +216,9 @@ public class ProductosController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> EditarProducto(int id, [FromBody] CrearProductoDto dto)
     {
-        var producto = await _context.Productos.FindAsync(id);
+        var producto = await _context.Productos
+            .Include(p => p.ProductoImagenes)
+            .FirstOrDefaultAsync(p => p.ProductoId == id);
         if (producto == null) return NotFound("Producto no encontrado.");
 
         if (!await _context.Categorias.AnyAsync(c => c.CategoriaId == dto.CategoriaId))
@@ -195,6 +233,25 @@ public class ProductosController : ControllerBase
         producto.Nombre = dto.Nombre;
         producto.Descripcion = dto.Descripcion;
         producto.PrecioBase = dto.PrecioBase;
+
+        if (!string.IsNullOrWhiteSpace(dto.UrlImagen))
+        {
+            var imagenPrincipal = producto.ProductoImagenes.FirstOrDefault(i => i.Orden == 1)
+                ?? producto.ProductoImagenes.OrderBy(i => i.Orden).FirstOrDefault();
+            if (imagenPrincipal is null)
+            {
+                producto.ProductoImagenes.Add(new ProductoImagene
+                {
+                    UrlImagen = dto.UrlImagen.Trim(),
+                    Orden = 1
+                });
+            }
+            else
+            {
+                imagenPrincipal.UrlImagen = dto.UrlImagen.Trim();
+                imagenPrincipal.Orden = 1;
+            }
+        }
 
         await _context.SaveChangesAsync();
 

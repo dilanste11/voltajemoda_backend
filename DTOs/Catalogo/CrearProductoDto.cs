@@ -20,4 +20,7 @@ public class CrearProductoDto
     [Required(ErrorMessage = "El precio base es obligatorio.")]
     [Range(0.01, double.MaxValue, ErrorMessage = "El precio debe ser mayor a 0.")]
     public decimal PrecioBase { get; set; }
+
+    [StringLength(255, ErrorMessage = "La URL de imagen no puede exceder los 255 caracteres.")]
+    public string? UrlImagen { get; set; }
 }

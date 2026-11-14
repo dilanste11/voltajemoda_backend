@@ -5,6 +5,7 @@ namespace voltajemoda_backend.DTOs.Inventario;
 public class CrearVarianteDto
 {
     [Required(ErrorMessage = "Debes indicar a qué producto pertenece esta variante.")]
+    [Range(1, int.MaxValue, ErrorMessage = "El ID debe ser mayor a 0")]
     public int ProductoId { get; set; }
 
     [Required(ErrorMessage = "El SKU de la variante es obligatorio.")]

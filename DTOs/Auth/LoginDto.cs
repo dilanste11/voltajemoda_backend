@@ -9,5 +9,6 @@ public class LoginDto
     public string CorreoElectronico { get; set; } = null!;
 
     [Required(ErrorMessage = "La contraseña es obligatoria.")]
+    [StringLength(100, MinimumLength = 6)]
     public string Password { get; set; } = null!;
 }
